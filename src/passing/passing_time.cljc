@@ -212,7 +212,7 @@
              (let [passing-time (:seconds-count new-state)
                    ;_ (log "True time: " passing-time)
                    derived-passing-time (passing->derived-time passing-time)
-                   do-echo (= (mod passing-time 100) 0)]
+                   do-echo (= (mod passing-time 2000) 0)]
                (when do-echo
                  (let [host-now (i/host-time abst-time)
                        host-derived (host->derived-time host-now)]
