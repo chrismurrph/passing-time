@@ -1,6 +1,6 @@
-(ns graphing.cljs-interop
+(ns passing.cljs-interop
   (:require [clojure.string :as str]
-            [graphing.interop :as i]))
+            [passing.interop :as i]))
 
 (defn crash
   ([^String msg]

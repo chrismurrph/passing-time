@@ -1,7 +1,7 @@
-(ns graphing.clj-interop
+(ns passing.clj-interop
   (:require
     [clojure.string :as str]
-    [graphing.interop :as i]
+    [passing.interop :as i]
     )
   (:import (java.text SimpleDateFormat)
            (java.util Arrays Date)))

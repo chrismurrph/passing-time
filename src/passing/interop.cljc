@@ -1,4 +1,4 @@
-(ns graphing.interop)
+(ns passing.interop)
 
 (defprotocol ITimeInterop
   "a protocol for calling date functions abstracted to work with clj and cljs"

@@ -1,10 +1,10 @@
-(ns graphing.passing-time
+(ns passing.passing-time
 
   (:require
-    #?@(:clj  [[graphing.interop :as i]
-               [graphing.clj-interop :as ci]]
-        :cljs [[graphing.interop :as i]
-               [graphing.cljs-interop :as ci]
+    #?@(:clj  [[passing.interop :as i]
+               [passing.clj-interop :as ci]]
+        :cljs [[passing.interop :as i]
+               [passing.cljs-interop :as ci]
                [clojure.string :as str]
                [cljs.core.async :as async :refer [<! >! chan close! timeout]]]))
 
@@ -108,7 +108,7 @@
 (def start-millis
   (delay (let [start-time (map->host-time @time-zero)
                res (.getTime start-time)
-               _ (i/log abst-time (str "start time in millis is: " res))]
+               _ (i/log abst-time (str "start time in millis: " res))]
            res)))
 
 (add-watch time-zero :watcher
@@ -187,10 +187,6 @@
 ;; One of the good things about this approach is there is no need to know the formal details. There are I believe
 ;; leap seconds etc - all will be taken account of if they happen.
 ;;
-;(defn remote-server-time-str
-;  ""
-;  []
-;  ())
 
 ;;
 ;; (js/Date.)

@@ -1,5 +1,5 @@
 (defproject passing "0.1.0-SNAPSHOT"
-  :description "supports graphing by providing 'timer style' numbers for time"
+  :description "provides 'timer style' numbers for time"
   :url "http://localhost:3449/"
 
   :dependencies [[org.clojure/clojure "1.7.0"]
@@ -19,14 +19,14 @@
     :builds [{:id "passing"
               :source-paths ["src"]
               :compiler {
-                :main graphing.core
-                :output-to "resources/public/js/graphing.js"
+                ;:main graphing.core
+                :output-to "resources/public/js/passing.js"
                 :output-dir "resources/public/js/out"
                 :asset-path "js/out"
                 :optimizations :none}}]                
                 }
 
-  :main ^:skip-aot graphing.passing-time)
+  :main ^:skip-aot passing.passing-time)
   
   :profiles
   ;; Uberjar profiles entry to specify how CLJS is compiled
