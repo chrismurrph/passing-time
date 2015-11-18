@@ -1,4 +1,4 @@
-(defproject graphing "0.1.0-SNAPSHOT"
+(defproject passing "0.1.0-SNAPSHOT"
   :description "supports graphing by providing 'timer style' numbers for time"
   :url "http://localhost:3449/"
 
@@ -9,6 +9,8 @@
   :plugins [[lein-cljsbuild "1.0.6"]]
 
   :source-paths ["src"]
+  
+  :hooks [leiningen.cljsbuild] ;; <--- Hook for uberjar to grab  
   
   :clean-targets ^{:protect false} ["resources/public/js" "target" 
                                     "resources/public/css"]
@@ -25,3 +27,12 @@
                 }
 
   :main ^:skip-aot graphing.passing-time)
+  
+  :profiles
+  ;; Uberjar profiles entry to specify how CLJS is compiled
+    {:uberjar {:aot :all
+               :cljsbuild {:builds [{:source-paths ["src"]
+                                     :compiler {:output-to "resources/public/js/script.js"
+                                                :optimizations :simple
+                                                :pretty-print false}
+                                   }]}}}

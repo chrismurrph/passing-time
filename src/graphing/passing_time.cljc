@@ -220,7 +220,7 @@
                (when do-echo
                  (let [host-now (i/host-time abst-time)
                        host-derived (host->derived-time host-now)]
-                   (i/log abst-time (str "passing-time: " derived-passing-time ", host-time: " host-derived)))))))
+                   (i/log abst-time (str "passing-time: " derived-passing-time "\nhost-time: " host-derived)))))))
 
 ;;
 ;; passing-time can also be in milliseconds, in which case it will of course be the number of milliseconds that
@@ -267,7 +267,7 @@
                        (record-time expected-in-five-seconds-map)
                        (recur 5000))
                      (let [diff (host-ahead-of-map-by expected-in-five-seconds-map host-now)]
-                       (i/log abst-time (str "EXPECTED: " expected-in-five-seconds-map " ACTUAL: " now-derived "\nDIFF: " diff " when been going for " (:seconds-count @seconds-past-zero)))
+                       (i/log abst-time (str "EXPECTATION: " expected-in-five-seconds-map " GOT: " now-derived "\nDIFF: " diff " when been going for " (:seconds-count @seconds-past-zero)))
                        (if (and (< (abs diff) 2000) (pos? diff))  ;; Other things using the machine seem to cause this
                                                                     ;; If the process is starved so much there's > 2 seconds delay here - then we want to crash!
                          (let [for-next-time expected-in-five-seconds-map
