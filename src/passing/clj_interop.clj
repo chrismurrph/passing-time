@@ -6,10 +6,10 @@
   (:import (java.text SimpleDateFormat)
            (java.util Arrays Date)))
 
-(defrecord CljTime []
+(defrecord CljTime [months]
   i/ITimeInterop
   (month-as-number [_ month-str]
-    (Arrays/binarySearch (to-array i/months) month-str))
+    (Arrays/binarySearch (to-array months) month-str))
   (host-time [_]
     (Date.))
   (host-time [_ millis]
@@ -34,7 +34,7 @@
           [month day-of-month year time-str] (str/split as-str #" ")
           month-as-idx (dec (i/parse-to-int this month))
           [hour min sec] (str/split time-str #":")]
-      {:month (nth i/months month-as-idx) :day-of-month day-of-month :year year :hour hour :min min :sec sec}))
+      {:month (nth months month-as-idx) :day-of-month day-of-month :year year :hour hour :min min :sec sec}))
   (crash [_ msg]
     (throw (Throwable. msg)))
   (crash [this]

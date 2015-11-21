@@ -2,8 +2,10 @@
 
   (:require
     #?@(:clj  [[passing.interop :as i]
+               [passing.model :as m]
                [passing.clj-interop :as ci]]
         :cljs [[passing.interop :as i]
+               [passing.model :as m]
                [passing.cljs-interop :as ci]
                [clojure.string :as str]
                [cljs.core.async :as async :refer [<! >! chan close! timeout]]]))
@@ -29,14 +31,19 @@
 ;; Time functions for Clojure or Clojurescript are polymorphically dispatched. In each case ci is a
 ;; different namespace.
 ;;
-#?(:cljs (def abst-time (ci/->CljsTime)))
-#?(:clj (def abst-time (ci/->CljTime)))
+#?(:cljs (def interop (ci/->CljsTime m/months)))
+#?(:clj (def interop (ci/->CljTime m/months)))
 
-(def last-day-of-months {"Jan" 31 "Feb" 28 "Mar" 31 "Apr" 30 "May" 31 "Jun" 30 "Jul" 31 "Aug" 31 "Sep" 30 "Oct" 31 "Nov" 30 "Dec" 31})
+(def log (partial i/log interop))
+(def crash (partial i/crash interop))
+;; I want to make it easy to call log, not sure about these others
+;(def host-time (partial i/host-time abst-time))
+;(def month-as-number (partial i/month-as-number abst-time))
+;(def millis-component-of-host-time (partial i/millis-component-of-host-time abst-time))
 
 (defn map->host-time [map-time]
   (let [{:keys [year month day-of-month hour minute second]} map-time
-        res (i/host-time abst-time year (i/month-as-number abst-time month) day-of-month hour minute second)
+        res (i/host-time interop year (i/month-as-number interop month) day-of-month hour minute second)
         ]
     res))
 
@@ -67,7 +74,7 @@
 (defn- get-next-month [in-month]
   (if (= in-month "Dec")
     nil
-    (nth i/months (inc (i/month-as-number abst-time in-month)))))
+    (nth m/months (inc (i/month-as-number interop in-month)))))
 
 (defn- in-n-seconds
   "Following standard conventions, what do we expect the time to be in n seconds from the given time"
@@ -81,7 +88,7 @@
         (merge in-time-map {:minute (inc minute) :second (more-at-the-top second)})
         (if (< hour 23)
           (merge in-time-map {:hour (inc hour) :minute 0 :second (more-at-the-top second)})
-          (let [max-day (get last-day-of-months month)]
+          (let [max-day (get m/last-day-of-months month)]
             (if (< day-of-month max-day)
               (merge in-time-map {:day-of-month (inc day-of-month) :hour 0 :minute 0 :second (more-at-the-top second)})
               (let [next-month (get-next-month month)]
@@ -92,10 +99,10 @@
 (defn host->derived-time
   [host-time]
   ;(log "IN:" host-time)
-  (let [millis (i/millis-component-of-host-time abst-time host-time)
-        {:keys [month day-of-month year hour min sec]} (i/format-from-time abst-time host-time)
-        seconds (i/parse-to-int abst-time sec)
-        b4-rounding {:year (i/parse-to-int abst-time year) :month month :day-of-month (i/parse-to-int abst-time day-of-month) :hour (i/parse-to-int abst-time hour) :minute (i/parse-to-int abst-time min) :second seconds}
+  (let [millis (i/millis-component-of-host-time interop host-time)
+        {:keys [month day-of-month year hour min sec]} (i/format-from-time interop host-time)
+        seconds (i/parse-to-int interop sec)
+        b4-rounding {:year (i/parse-to-int interop year) :month month :day-of-month (i/parse-to-int interop day-of-month) :hour (i/parse-to-int interop hour) :minute (i/parse-to-int interop min) :second seconds}
         more-than-half-way-to-next (>= millis 500)]
     ;(log month " " day-of-month " " year " " hour " " min " " sec)
     (if more-than-half-way-to-next
@@ -108,16 +115,16 @@
 (def start-millis
   (delay (let [start-time (map->host-time @time-zero)
                res (.getTime start-time)
-               _ (i/log abst-time (str "start time in millis: " res))]
+               _ (log (str "start time in millis: " res))]
            res)))
 
 (add-watch time-zero :watcher
            (fn [key atom old-state new-state]
-             (i/log abst-time (str "time-zero set to: " new-state))))
+             (log (str "time-zero set to: " new-state))))
 
 (defn host-add-seconds [seconds]
   (let [augmented-millis (+ (* seconds 1000) @start-millis)
-        res (i/host-time abst-time augmented-millis)]
+        res (i/host-time interop augmented-millis)]
     res))
 
 ;;
@@ -146,7 +153,7 @@
 
 (defn derived->passing-time [derived-time]
   (let [{:keys [year month day-of-month hour minute second]} derived-time]
-    (i/crash abst-time "Does not need to exist - only the opposite - always have passing times, convert using opposite when need to display")))
+    (crash "Does not need to exist - only the opposite - always have passing times, convert using opposite when need to display")))
 
 ;;
 ;; It might be better (going from Rich Hickey saying not to ship time around - an aside in one of his talks) not
@@ -214,9 +221,9 @@
                    derived-passing-time (passing->derived-time passing-time)
                    do-echo (= (mod passing-time 2000) 0)]
                (when do-echo
-                 (let [host-now (i/host-time abst-time)
+                 (let [host-now (i/host-time interop)
                        host-derived (host->derived-time host-now)]
-                   (i/log abst-time (str "passing-time: " derived-passing-time "\nhost-time: " host-derived)))))))
+                   (log (str "passing-time: " derived-passing-time "\nhost-time: " host-derived)))))))
 
 ;;
 ;; passing-time can also be in milliseconds, in which case it will of course be the number of milliseconds that
@@ -226,10 +233,10 @@
   (let [passing-time (:seconds-count @seconds-past-zero)
         derived-passing-time (passing->derived-time passing-time)
         derived-passing-as-host (map->host-time derived-passing-time)
-        host-now (i/host-time abst-time)
+        host-now (i/host-time interop)
         host-ahead-by (- (.getTime host-now) (.getTime derived-passing-as-host))
         _ (assert (<= 0 host-ahead-by 5999))
-        _ (when (>= host-ahead-by 5000) (i/log abst-time (str "Unusual to see host ahead by 5000 or more. Derived: " derived-passing-time ", Host: " host-now)))
+        _ (when (>= host-ahead-by 5000) (log (str "Unusual to see host ahead by 5000 or more. Derived: " derived-passing-time ", Host: " host-now)))
         res (+ (* 1000 passing-time) host-ahead-by)
         ]
     res))
@@ -250,7 +257,7 @@
         in-five-seconds (partial in-n-seconds 5)]
     (go-loop [wait-time 0]
              (<! (timeout wait-time))
-             (let [host-now (i/host-time abst-time)
+             (let [host-now (i/host-time interop)
                    now-derived (host->derived-time host-now)]
                (if (nil? @last-time-map)
                  (do
@@ -263,29 +270,38 @@
                        (record-time expected-in-five-seconds-map)
                        (recur 5000))
                      (let [diff (host-ahead-of-map-by expected-in-five-seconds-map host-now)]
-                       (i/log abst-time (str "EXPECTATION: " expected-in-five-seconds-map " GOT: " now-derived "\nDIFF: " diff " when been going for " (:seconds-count @seconds-past-zero)))
+                       (log (str "EXPECTATION: " expected-in-five-seconds-map " GOT: " now-derived "\nDIFF: " diff " when been going for " (:seconds-count @seconds-past-zero)))
                        (if (and (< (abs diff) 2000) (pos? diff))  ;; Other things using the machine seem to cause this
                                                                     ;; If the process is starved so much there's > 2 seconds delay here - then we want to crash!
                          (let [for-next-time expected-in-five-seconds-map
                                advance (if (pos? diff) 1000 -1000)]
                            (record-time for-next-time)
                            (recur (- 5000 advance)))
-                         (i/crash abst-time (str "Need to record a variance or anomolie because diff is -ive or > 1 second: " diff)))))))))))
+                         (crash (str "Need to record a variance or anomolie because diff is -ive or > 1 second: " diff)))))))))))
 
 ;;
 ;; No real reason to start more or less exactly on a second, but will make reasoning easier.
 ;;
-(defn start-timer [count]
-  (let [new-host-time (i/host-time abst-time)
-        millis (i/millis-component-of-host-time abst-time new-host-time)
-        on-the-exact (or (= millis 999) (= millis 0))]
-    (if on-the-exact
-      (do
-        (reset! time-zero (host->derived-time new-host-time))
-        (time-zero-five-seconds-timer))
-      (recur (inc count)))))
+(defn start-timer
+  ([count] ;; Don't use this, or in other words you should pass in 0
+   (if (nil? @time-zero)
+     (let [new-host-time (i/host-time interop)
+           millis (i/millis-component-of-host-time interop new-host-time)
+           on-the-exact (= millis 0)]
+       (if on-the-exact
+         (do
+           (reset! time-zero (host->derived-time new-host-time))
+           (time-zero-five-seconds-timer))
+         (recur (inc count))))
+     (log (str "Timer is already going so can't be started again. time-zero is: " @time-zero ", and seconds past zero is: " (:seconds-count @seconds-past-zero)))))
+  ([]
+    (start-timer 0))
+  )
 
-(defonce _ (start-timer 0))
+;;
+;; This library will be used on client and server so ought to be manually started
+;;
+;;(defonce _ (start-timer 0))
 
 ;;
 ;; Having a main is just for testing. Whether on Client or Server all you need to do is include this file and
@@ -293,8 +309,6 @@
 ;;
 #?(:clj
    (defn -main
-  [& args]
-  ;(println (host-time 2015 0 14 11 22 06))
-  ;(start-timer 0)
-  ;(println (stringify-time (host-time)))
-  (Thread/sleep 100000)))
+     [& args]
+     (start-timer)
+     (Thread/sleep 100000)))

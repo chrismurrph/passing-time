@@ -10,10 +10,10 @@
    (crash "Purposeful crash"))
   )
 
-(defrecord CljsTime []
+(defrecord CljsTime [months]
   i/ITimeInterop
   (month-as-number [_ month-str]
-    (.indexOf (to-array i/months) month-str))
+    (.indexOf (to-array months) month-str))
   (host-time [_]
     (js/Date.))
   (host-time [_ millis]
