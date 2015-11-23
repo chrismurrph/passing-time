@@ -41,6 +41,11 @@
 ;(def month-as-number (partial i/month-as-number abst-time))
 ;(def millis-component-of-host-time (partial i/millis-component-of-host-time abst-time))
 
+;;
+;; There seem to be compile errors related to model/time-zero. Makes no sense to me!
+;;
+(def time-zero model/time-zero)
+
 (defn map->host-time [map-time]
   (let [{:keys [year month day-of-month hour minute second]} map-time
         res (i/host-time interop year (i/month-as-number interop month) day-of-month hour minute second)
@@ -111,12 +116,12 @@
     ))
 
 (def start-millis
-  (delay (let [start-time (map->host-time @model/time-zero)
+  (delay (let [start-time (map->host-time @time-zero)
                res (.getTime start-time)
                _ (log (str "start time in millis: " res))]
            res)))
 
-(add-watch model/time-zero :watcher
+(add-watch time-zero :watcher
            (fn [key atom old-state new-state]
              (log (str "time-zero set to: " new-state))))
 
@@ -277,7 +282,7 @@
                        (record-time! expected-in-five-seconds-map)
                        (recur 5000))
                      (let [diff (host-ahead-of-map-by expected-in-five-seconds-map host-now)]
-                       (log (str "EXPECTATION: " expected-in-five-seconds-map " GOT: " now-derived "\nDIFF: " diff " when been going for " (:seconds-count @seconds-past-zero)))
+                       (log (str "EXPECTATION: " expected-in-five-seconds-map " GOT: " now-derived "\nDIFF: " diff " millis when been going for " (:seconds-count @seconds-past-zero) " seconds"))
                        (if (and (< (abs diff) 2000) (pos? diff))  ;; Other things using the machine seem to cause this
                                                                     ;; If the process is starved so much there's > 2 seconds delay here - then we want to crash!
                          (let [advance (if (pos? diff) 1000 -1000)]
@@ -289,23 +294,23 @@
                                (record-variance! passing-would-be :leap-year)
                                (record-time! expected-in-five-seconds-map)
                                (recur 5000))
-                             (crash (str "Need to record an anomaly because no variance found and diff is -ive or > 1 second: " diff)))))))))))))
+                             (crash (str "Need to record an anomaly because no variance found and diff is -ive or > 2 seconds: " diff)))))))))))))
 
 ;;
 ;; No real reason to start more or less exactly on a second, but will make reasoning easier.
 ;;
 (defn start-timer
   ([count] ;; Don't use this, or in other words you should pass in 0
-   (if (nil? @model/time-zero)
+   (if (nil? @time-zero)
      (let [new-host-time (i/host-time interop)
            millis (i/millis-component-of-host-time interop new-host-time)
            on-the-exact (= millis 0)]
        (if on-the-exact
          (do
-           (reset! model/time-zero (host->derived-time new-host-time))
+           (reset! time-zero (host->derived-time new-host-time))
            (time-zero-five-seconds-timer))
          (recur (inc count))))
-     (log (str "Timer is already going so can't be started again. time-zero is: " @model/time-zero ", and seconds past zero is: " (:seconds-count @seconds-past-zero)))))
+     (log (str "Timer is already going so can't be started again. time-zero is: " @time-zero ", and seconds past zero is: " (:seconds-count @seconds-past-zero)))))
   ([]
     (start-timer 0))
   )
