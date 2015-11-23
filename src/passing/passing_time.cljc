@@ -2,10 +2,10 @@
 
   (:require
     #?@(:clj  [[passing.interop :as i]
-               [passing.model :as m]
+               [passing.model :as model]
                [passing.clj-interop :as ci]]
         :cljs [[passing.interop :as i]
-               [passing.model :as m]
+               [passing.model :as model]
                [passing.cljs-interop :as ci]
                [clojure.string :as str]
                [cljs.core.async :as async :refer [<! >! chan close! timeout]]]))
@@ -31,8 +31,8 @@
 ;; Time functions for Clojure or Clojurescript are polymorphically dispatched. In each case ci is a
 ;; different namespace.
 ;;
-#?(:cljs (def interop (ci/->CljsTime m/months)))
-#?(:clj (def interop (ci/->CljTime m/months)))
+#?(:cljs (def interop (ci/->CljsTime model/months)))
+#?(:clj (def interop (ci/->CljTime model/months)))
 
 (def log (partial i/log interop))
 (def crash (partial i/crash interop))
@@ -74,7 +74,7 @@
 (defn- get-next-month [in-month]
   (if (= in-month "Dec")
     nil
-    (nth m/months (inc (i/month-as-number interop in-month)))))
+    (nth model/months (inc (i/month-as-number interop in-month)))))
 
 (defn- in-n-seconds
   "Following standard conventions, what do we expect the time to be in n seconds from the given time"
@@ -88,7 +88,7 @@
         (merge in-time-map {:minute (inc minute) :second (more-at-the-top second)})
         (if (< hour 23)
           (merge in-time-map {:hour (inc hour) :minute 0 :second (more-at-the-top second)})
-          (let [max-day (get m/last-day-of-months month)]
+          (let [max-day (get model/last-day-of-months month)]
             (if (< day-of-month max-day)
               (merge in-time-map {:day-of-month (inc day-of-month) :hour 0 :minute 0 :second (more-at-the-top second)})
               (let [next-month (get-next-month month)]
@@ -110,15 +110,13 @@
       b4-rounding)
     ))
 
-;; If we just generate browser session data then time-zero being when the browser app starts is fine
-(def time-zero (atom nil))
 (def start-millis
-  (delay (let [start-time (map->host-time @time-zero)
+  (delay (let [start-time (map->host-time @model/time-zero)
                res (.getTime start-time)
                _ (log (str "start time in millis: " res))]
            res)))
 
-(add-watch time-zero :watcher
+(add-watch model/time-zero :watcher
            (fn [key atom old-state new-state]
              (log (str "time-zero set to: " new-state))))
 
@@ -126,14 +124,6 @@
   (let [augmented-millis (+ (* seconds 1000) @start-millis)
         res (i/host-time interop augmented-millis)]
     res))
-
-;;
-;; Record variances in order as they happen. This, time-zero and anomolies will all be durable i.e. be kept
-;; in the database. key is the expected time, which is a map, and val is the variance at that time.
-;; Note as a general point that expected time should never be shown to a user because it will usually be
-;; wrong.
-;;
-(def variances (atom []))
 
 ;; (+ passing-time (reduce + (vals variances)))
 (defn- sum-variances-up-to [passing-time]
@@ -247,13 +237,30 @@
 ;;
 (defn current-passing-time [] (/ (current-passing-millis-time) 1000))
 
+;;
+;; :not-recognised
+;; :leap-year
+;; :dst-on
+;; :dst-off
+;;
+(defn variance-type-recognised [wallclock-time diff]
+  (if (model/recognised-leap-year? wallclock-time diff)
+    true
+    (if (model/recognised-dst-start? wallclock-time diff)
+      true
+      (if (model/recognised-dst-end? wallclock-time diff)
+        true
+        false))))
+
 (defn time-zero-five-seconds-timer []
   (let [last-time-map (atom nil)
         ;; Always recording the set time, but sometimes noticing time has moved faster
-        record-time (fn [new-actual-time-map]
+        record-time! (fn [new-actual-time-map]
                       (reset! last-time-map new-actual-time-map)
                       (swap! seconds-past-zero (fn [{:keys [seconds-count]}] {:seconds-count (+ seconds-count 5)}))
                       )
+        record-variance! (fn [expected-passing variance-type]
+                          (swap! model/variances conj [expected-passing variance-type]))
         in-five-seconds (partial in-n-seconds 5)]
     (go-loop [wait-time 0]
              (<! (timeout wait-time))
@@ -267,33 +274,38 @@
                        are-equal (= expected-in-five-seconds-map now-derived)]
                    (if are-equal
                      (do
-                       (record-time expected-in-five-seconds-map)
+                       (record-time! expected-in-five-seconds-map)
                        (recur 5000))
                      (let [diff (host-ahead-of-map-by expected-in-five-seconds-map host-now)]
                        (log (str "EXPECTATION: " expected-in-five-seconds-map " GOT: " now-derived "\nDIFF: " diff " when been going for " (:seconds-count @seconds-past-zero)))
                        (if (and (< (abs diff) 2000) (pos? diff))  ;; Other things using the machine seem to cause this
                                                                     ;; If the process is starved so much there's > 2 seconds delay here - then we want to crash!
-                         (let [for-next-time expected-in-five-seconds-map
-                               advance (if (pos? diff) 1000 -1000)]
-                           (record-time for-next-time)
+                         (let [advance (if (pos? diff) 1000 -1000)]
+                           (record-time! expected-in-five-seconds-map)
                            (recur (- 5000 advance)))
-                         (crash (str "Need to record a variance or anomolie because diff is -ive or > 1 second: " diff)))))))))))
+                         (let [passing-would-be (+ (:seconds-count @seconds-past-zero) 5)]
+                           (if (variance-type-recognised host-now diff)
+                             (do
+                               (record-variance! passing-would-be :leap-year)
+                               (record-time! expected-in-five-seconds-map)
+                               (recur 5000))
+                             (crash (str "Need to record an anomaly because no variance found and diff is -ive or > 1 second: " diff)))))))))))))
 
 ;;
 ;; No real reason to start more or less exactly on a second, but will make reasoning easier.
 ;;
 (defn start-timer
   ([count] ;; Don't use this, or in other words you should pass in 0
-   (if (nil? @time-zero)
+   (if (nil? @model/time-zero)
      (let [new-host-time (i/host-time interop)
            millis (i/millis-component-of-host-time interop new-host-time)
            on-the-exact (= millis 0)]
        (if on-the-exact
          (do
-           (reset! time-zero (host->derived-time new-host-time))
+           (reset! model/time-zero (host->derived-time new-host-time))
            (time-zero-five-seconds-timer))
          (recur (inc count))))
-     (log (str "Timer is already going so can't be started again. time-zero is: " @time-zero ", and seconds past zero is: " (:seconds-count @seconds-past-zero)))))
+     (log (str "Timer is already going so can't be started again. time-zero is: " @model/time-zero ", and seconds past zero is: " (:seconds-count @seconds-past-zero)))))
   ([]
     (start-timer 0))
   )
