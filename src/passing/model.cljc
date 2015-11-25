@@ -21,10 +21,11 @@
 ;; A normal year is the minimum length year
 ;; :duration and :expected-diff are both in seconds
 ;;
-(def one-hour (* 60 60))
+(def one-minute 60)
+(def one-hour (* 60 one-minute))
 (def one-day (* 24 one-hour))
 (def one-year (reduce + (map #(* % one-day) (vals last-day-of-months))))
-(log (str "Number seconds in a normal year: " one-year))
+(defn seconds->days [seconds] (/ seconds one-day))
 
 ;;
 ;; times are in seconds.

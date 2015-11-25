@@ -2,10 +2,10 @@
 
   (:require
     #?@(:clj  [[passing.interop :as i]
-               [passing.model :as model]
+               [passing.model :as m]
                [passing.clj-interop :as ci]]
         :cljs [[passing.interop :as i]
-               [passing.model :as model]
+               [passing.model :as m]
                [passing.cljs-interop :as ci]
                [clojure.string :as str]
                [cljs.core.async :as async :refer [<! >! chan close! timeout]]]))
@@ -31,8 +31,8 @@
 ;; Time functions for Clojure or Clojurescript are polymorphically dispatched. In each case ci is a
 ;; different namespace.
 ;;
-#?(:cljs (def interop (ci/->CljsTime model/months)))
-#?(:clj (def interop (ci/->CljTime model/months)))
+#?(:cljs (def interop (ci/->CljsTime m/months)))
+#?(:clj (def interop (ci/->CljTime m/months)))
 
 (def log (partial i/log interop))
 (def crash (partial i/crash interop))
@@ -44,13 +44,69 @@
 ;;
 ;; There seem to be compile errors related to model/time-zero. Makes no sense to me!
 ;;
-(def time-zero model/time-zero)
+(def time-zero m/time-zero)
 
 (defn map->host-time [map-time]
   (let [{:keys [year month day-of-month hour minute second]} map-time
         res (i/host-time interop year (i/month-as-number interop month) day-of-month hour minute second)
         ]
     res))
+
+(defn roll-out-months
+  "Given a number of seconds that is less than a year find out which month are in and how many seconds remaining"
+  [seconds]
+  (loop [month-idx 0
+         accum-seconds 0]
+    (let [current-month-its-days (nth (vals m/last-day-of-months) month-idx)
+          its-seconds (* m/one-day current-month-its-days)
+          next-accum-secs (+ accum-seconds its-seconds)
+          found-month (< seconds next-accum-secs)
+          _ (log (str "Found month: " found-month " when seconds accum-seconds its-seconds: " (m/seconds->days seconds) " " (m/seconds->days accum-seconds) " " (m/seconds->days its-seconds)))
+          ]
+      (if found-month
+        [(nth m/months month-idx) (- seconds accum-seconds)]
+        (recur (inc month-idx) next-accum-secs))))
+  )
+
+(defn quotrem
+  [numerator denominator]
+  (let [whole-num (quot numerator denominator)
+        left-over (rem numerator denominator)]
+    [whole-num left-over]))
+
+;;
+;; While returning a map, it is the map from time zero. It is a duration. Add it to the map at time zero to get a
+;; map that will be a point in time.
+;;
+(defn from-zero
+  "Given a number of seconds since time-zero, return the derived map as it would be if obeyed all the normal rules"
+  [seconds]
+  (let [num-years (quot seconds m/one-year)
+        ;_ (log num-years)
+        after-years-seconds (rem seconds m/one-year)
+        [month-str after-months-seconds] (roll-out-months after-years-seconds)
+        ;_ (log (str month-str " " after-months-seconds))
+        num-days (quot after-months-seconds m/one-day)
+        after-days-seconds (rem after-months-seconds m/one-day)
+        num-hours (quot after-days-seconds m/one-hour)
+        after-hours-seconds (rem after-days-seconds m/one-hour)
+        num-minutes (quot after-hours-seconds m/one-minute)
+        after-minutes-seconds (rem after-hours-seconds m/one-minute)]
+    {:year num-years :month month-str :day-of-month num-days :hour num-hours :minute num-minutes :second after-minutes-seconds})
+  )
+
+(defn add-maps
+  [first second]
+  nil)
+
+;;
+;; Same as `in-n-seconds` but more sophisticated as works with any number of seconds rather than just a few
+;;
+(defn- move-forward
+  "Following standard conventions, what do we expect the time to be in n seconds from the given time"
+  [n in-time-map]
+  (add-maps (from-zero n) in-time-map))
+
 
 ;;
 ;; This function returns the difference in milliseconds. Tiny drifts can be adjusted for. Anything else is
@@ -63,10 +119,10 @@
 ;;
 ;; new Date(year, month, day, hours, minutes, seconds, milliseconds)
 ;;
-(defn- host-ahead-of-map-by [expected-map js-time]
+(defn- host-ahead-of-map-by [expected-map host-time]
   (let [expected-time (map->host-time expected-map)
         ;_ (log "expected-time: " expected-time)
-        diff (- (.getTime js-time) (.getTime expected-time))
+        diff (- (.getTime host-time) (.getTime expected-time))
         ;_ (log "Amount that current: " current-time " is more than expected: " expected-time ", is: " diff)
         ;_ (assert (>= (u/abs diff) 500) (str "diff not >= 500, but: " diff))
         ]
@@ -79,7 +135,7 @@
 (defn- get-next-month [in-month]
   (if (= in-month "Dec")
     nil
-    (nth model/months (inc (i/month-as-number interop in-month)))))
+    (nth m/months (inc (i/month-as-number interop in-month)))))
 
 (defn- in-n-seconds
   "Following standard conventions, what do we expect the time to be in n seconds from the given time"
@@ -93,7 +149,7 @@
         (merge in-time-map {:minute (inc minute) :second (more-at-the-top second)})
         (if (< hour 23)
           (merge in-time-map {:hour (inc hour) :minute 0 :second (more-at-the-top second)})
-          (let [max-day (get model/last-day-of-months month)]
+          (let [max-day (get m/last-day-of-months month)]
             (if (< day-of-month max-day)
               (merge in-time-map {:day-of-month (inc day-of-month) :hour 0 :minute 0 :second (more-at-the-top second)})
               (let [next-month (get-next-month month)]
@@ -249,11 +305,11 @@
 ;; :dst-off
 ;;
 (defn variance-type-recognised [wallclock-time diff]
-  (if (model/recognised-leap-year? wallclock-time diff)
+  (if (m/recognised-leap-year? wallclock-time diff)
     true
-    (if (model/recognised-dst-start? wallclock-time diff)
+    (if (m/recognised-dst-start? wallclock-time diff)
       true
-      (if (model/recognised-dst-end? wallclock-time diff)
+      (if (m/recognised-dst-end? wallclock-time diff)
         true
         false))))
 
@@ -265,7 +321,7 @@
                       (swap! seconds-past-zero (fn [{:keys [seconds-count]}] {:seconds-count (+ seconds-count 5)}))
                       )
         record-variance! (fn [expected-passing variance-type]
-                          (swap! model/variances conj [expected-passing variance-type]))
+                          (swap! m/variances conj [expected-passing variance-type]))
         in-five-seconds (partial in-n-seconds 5)]
     (go-loop [wait-time 0]
              (<! (timeout wait-time))
@@ -300,7 +356,7 @@
 ;; No real reason to start more or less exactly on a second, but will make reasoning easier.
 ;;
 (defn start-timer
-  ([count] ;; Don't use this, or in other words you should pass in 0
+  ([count] ;; Don't use this, or in other words you should let the [] call pass in 0 for you
    (if (nil? @time-zero)
      (let [new-host-time (i/host-time interop)
            millis (i/millis-component-of-host-time interop new-host-time)
@@ -315,6 +371,13 @@
     (start-timer 0))
   )
 
+(defn test-months []
+  (let [res (roll-out-months (* 35 m/one-day))
+        [month-in more-seconds] res
+        _ (println month-in)
+        days (/ more-seconds m/one-day)
+        _ (println days)]))
+
 ;;
 ;; This library will be used on client and server so ought to be manually started
 ;;
@@ -327,5 +390,8 @@
 #?(:clj
    (defn -main
      [& args]
-     (start-timer)
-     (Thread/sleep 100000)))
+     ;(start-timer)
+     (println (from-zero (+ (* 31 m/one-day) (* 25 m/one-hour))))
+     ;(Thread/sleep 100000)
+     )
+   )
