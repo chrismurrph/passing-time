@@ -25,7 +25,25 @@
 (def one-hour (* 60 one-minute))
 (def one-day (* 24 one-hour))
 (def one-year (reduce + (map #(* % one-day) (vals last-day-of-months))))
+
 (defn seconds->days [seconds] (/ seconds one-day))
+
+;;
+;; If the month is Jan the value s/be 0
+;;
+(defn month->seconds [month-str])
+
+(defn year->seconds [num-years]
+  (* num-years one-year))
+
+(defn day->seconds [num-days]
+  (* num-days one-day))
+
+(defn hour->seconds [num-hours]
+  (* num-hours one-hour))
+
+(defn minute->seconds [num-minutes]
+  (* num-minutes one-minute))
 
 ;;
 ;; times are in seconds.

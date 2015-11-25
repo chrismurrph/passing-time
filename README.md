@@ -1,5 +1,9 @@
 # passing-time
 
+TIL that the way to get around the problem this library was trying to address is to use UTC. UTC does not have Daylight Savings. This library was a defense mechanism against DST changes. Leap years are not nearly so much of a problem.
+
+
+
 This library exists to abstract away time changes that cannot be 'experienced'. Any passing-time value is the accumulation of time since 'time zero'.
 
 Daylight Savings Time and other artificial changes are recorded and can be applied to passing-time if and when necessary. However values for time that are stored in the database, passed over the wire and otherwise used by the programmer should all come from the passing-time timer. Time zero might be when the application was installed. 

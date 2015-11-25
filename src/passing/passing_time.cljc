@@ -68,7 +68,10 @@
         (recur (inc month-idx) next-accum-secs))))
   )
 
-(defn quotrem
+;;
+;; quot[ient] and remainer returned in a 2-tuple
+;;
+(defn quot-rem
   [numerator denominator]
   (let [whole-num (quot numerator denominator)
         left-over (rem numerator denominator)]
@@ -81,17 +84,12 @@
 (defn from-zero
   "Given a number of seconds since time-zero, return the derived map as it would be if obeyed all the normal rules"
   [seconds]
-  (let [num-years (quot seconds m/one-year)
-        ;_ (log num-years)
-        after-years-seconds (rem seconds m/one-year)
+  (let [[num-years after-years-seconds] (quot-rem seconds m/one-year)
         [month-str after-months-seconds] (roll-out-months after-years-seconds)
-        ;_ (log (str month-str " " after-months-seconds))
-        num-days (quot after-months-seconds m/one-day)
-        after-days-seconds (rem after-months-seconds m/one-day)
-        num-hours (quot after-days-seconds m/one-hour)
-        after-hours-seconds (rem after-days-seconds m/one-hour)
-        num-minutes (quot after-hours-seconds m/one-minute)
-        after-minutes-seconds (rem after-hours-seconds m/one-minute)]
+        [num-days after-days-seconds] (quot-rem after-months-seconds m/one-day)
+        [num-hours after-hours-seconds] (quot-rem after-days-seconds m/one-hour)
+        [num-minutes after-minutes-seconds] (quot-rem after-hours-seconds m/one-minute)
+        ]
     {:year num-years :month month-str :day-of-month num-days :hour num-hours :minute num-minutes :second after-minutes-seconds})
   )
 
